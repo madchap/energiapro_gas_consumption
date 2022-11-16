@@ -1,0 +1,8 @@
+secrets.yaml
+appdaemon.yaml
+compiled/
+dashboards/
+namespaces/
+www/
+appdaemons/
+apps/

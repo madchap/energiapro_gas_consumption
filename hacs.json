@@ -1,0 +1,6 @@
+{
+  "name": "EnergiaPro gas consumption",
+  "content_in_root": true,
+  "country": ["CH"],
+  "render_readme": true
+}
