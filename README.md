@@ -31,6 +31,8 @@ Make sure you have the following installed:
 - requests
 - selenium
 
+You will need `chromedriver` installed as well for selenium to be able to work with the default settings, or `geckodriver` if you choose firefox.
+
 You may also have to have support for `xvfb` on your underlying O/S.
 
 ## Configuration

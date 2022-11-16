@@ -14,7 +14,7 @@ import time
 import requests
 
 
-class EnergiaproGazConsumption(hassapi.Hass):
+class EnergiaproGasConsumption(hassapi.Hass):
     global download_folder
     download_folder = tempfile.mkdtemp()
 
@@ -22,16 +22,16 @@ class EnergiaproGazConsumption(hassapi.Hass):
         data = await request.json()
         self.log(data)
         response = {"message": "Triggered!"}
-        self.get_gaz_data()
+        self.get_gas_data()
 
         return response, 200
 
     def initialize(self):
         # register an API endpoint for manual triggering
         # call with something like
-        # $ curl -XPOST -i -H "Content-Type: application/json" http://localhost:5050/api/appdaemon/energiapro_gaz_consumption -d '{"action": "Gazzz"}'
-        self.register_endpoint(self.my_callback, "energiapro_gaz_consumption")
-        # self.run_at_sunrise(self.get_gaz_data)
+        # $ curl -XPOST -i -H "Content-Type: application/json" http://localhost:5050/api/appdaemon/energiapro_gas_consumption -d '{"action": "Gazzz"}'
+        self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+        self.run_at_sunrise(self.get_gas_data)
 
     def convert_xls_to_csv(self, xls_filename):
         xls_data = pd.read_excel(xls_filename, engine="xlrd")
@@ -45,7 +45,11 @@ class EnergiaproGazConsumption(hassapi.Hass):
                 f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.csv"
             )
         )
-        self.log(df)
+        if len(df.columns) == 0:
+            self.log(
+                f"Didn't seem to get any data in the Excel file... count is {df.count()}."
+            )
+            self.log("Check your configuration (installation number).")
 
         self.post_to_entities(df)
 
@@ -53,10 +57,7 @@ class EnergiaproGazConsumption(hassapi.Hass):
         files = glob.glob(
             download_folder + f"/*{self.args['energiapro_installation_number']}*.xls"
         )
-        # files = glob.glob(download_folder + "/*.xls")
-        self.log(f"DEBUG: list of files: {str(files)}")
         last_file = max(files, key=os.path.getctime)
-        self.log(f"DEBUG: last file: {last_file}")
 
         return last_file
 
@@ -72,12 +73,14 @@ class EnergiaproGazConsumption(hassapi.Hass):
     def post_to_entities(self, df):
         if self.args["ha_url"]:
             # get HA's url from app's first, if configured/overriden by user
+            self.log("Using ha_url from app's configuration")
             ha_url = self.args["ha_url"]
         elif self.config["plugins"]["HASS"]["ha_url"]:
             # if not configured in app, get it from the hassplugin
+            self.log("Using ha_url from appdaemons.yaml configuration")
             ha_url = self.config["plugins"]["HASS"]["ha_url"]
         else:
-            self.log("No Home Assistant URL configured. Aborting")
+            self.log("No Home Assistant URL configured. Aborting.")
             sys.exit(2)
         self.log(f"HA url is {ha_url}")
 
@@ -96,11 +99,9 @@ class EnergiaproGazConsumption(hassapi.Hass):
                     "state_class": "total_increasing",
                 },
             }
-            # self.log("payload {}".format(daily_payload))
 
             r = requests.post(entity_url, json=daily_payload, headers=headers)
             self.log("POST'ing status: {}".format(r.status_code))
-            # self.log("Response content: {}".format(r.json()))
 
         def _post_total_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_total"
@@ -122,10 +123,11 @@ class EnergiaproGazConsumption(hassapi.Hass):
             r = requests.post(entity_url, json=total_payload, headers=headers)
             self.log("POST'ing status: {}".format(r.status_code))
 
+        self.log("BEFORE posting calls")
         _post_daily_consumption()
         _post_total_consumption()
 
-    def get_gaz_data(self):
+    def get_gas_data(self):
         base_url = "https://www.holdigaz.ch/espace-client"
         login_url = f"{base_url}/views/view.login.php"
         csv_base_export_link = f"{base_url}/views/view.statistiques.lpn.php?a="
@@ -136,7 +138,6 @@ class EnergiaproGazConsumption(hassapi.Hass):
             # display = Display(visible=0, size=(1440, 900))
             # display.start()
 
-            self.log("DEBUG: Initiating browser")
             if self.args["browser"] == "firefox":
                 # FF driver option - has issue with WebGL, won't work at times.
                 options = webdriver.firefox.options.Options()
@@ -181,31 +182,28 @@ class EnergiaproGazConsumption(hassapi.Hass):
             passwd_el.send_keys(self.args["energiapro_password"])
             driver.find_element(By.XPATH, '//button[text()="Login"]').click()
 
-            self.log("Waiting for portal to come up...")
+            # self.log("Waiting for portal to come up...")
             elem = WebDriverWait(driver, 30).until(
                 EC.url_contains("view.espace-client.php")
             )
 
-            self.log("Navigate to consumption page")
+            # self.log("Navigate to consumption page")
             # navigate to consumption page
             driver.get(
                 f"{csv_base_export_link}{self.args['energiapro_installation_number']}"
             )
 
             # download file
-            self.log("Identifying and waiting for download link")
+            # self.log("Identifying and waiting for download link")
             export_link = driver.find_element(By.ID, "exportLPN")
             # export_link = driver.find_element(By.LINK_TEXT, "Exporter tous les relevés")
             elem = WebDriverWait(driver, 30).until(
                 EC.element_to_be_clickable(export_link)
             )
-            self.log(f"Text of export_link: {export_link.text}")
             self.log("Downloading xls file")
             driver.find_element(By.ID, "exportLPN").click()
             time.sleep(2)
-            self.log("Done downloading")
             filename = self.get_downloaded_file_name()
-            self.log(f"File is {filename}. Converting to csv.")
             self.convert_xls_to_csv(filename)
             self.cleanup_files()
         except Exception as e:
