@@ -131,45 +131,16 @@ class EnergiaproGasConsumption(hassapi.Hass):
         csv_base_export_link = f"{base_url}/views/view.statistiques.lpn.php?a="
 
         try:
-            # virtual display
-            # self.log("DEBUG: Starting virtual display")
-            # display = Display(visible=0, size=(1440, 900))
-            # display.start()
+            chrome_options = webdriver.chrome.options.Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--window-size=1024,768")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--no-sandbox")
+            prefs = {"download.default_directory": download_folder}
+            chrome_options.add_experimental_option("prefs", prefs)
+            driver = webdriver.Chrome(options=chrome_options)
 
-            if self.args["browser"] == "firefox":
-                # FF driver option - has issue with WebGL, won't work at times.
-                options = webdriver.firefox.options.Options()
-                options.add_argument("--headless")
-                options.add_argument("--disable-gpu")
-                options.add_argument("--window-size=1440,900")
-                options.set_preference("browser.download.dir", download_folder)
-                options.set_preference("browser.download.folderList", 2)
-                options.set_preference(
-                    "browser.helperApps.neverAsk.saveToDisk",
-                    "text/csv,application/vnd.ms-excel",
-                )
-                options.set_preference(
-                    "browser.helperApps.neverAsk.openFile",
-                    "text/csv,application/vnd.ms-excel",
-                )
-                options.set_preference(
-                    "browser.download.manager.showWhenStarting", False
-                )
-                options.set_preference("browser.helperApps.alwaysAsk.force", False)
-                driver = webdriver.Firefox(
-                    options=options, service_log_path="/tmp/geckodriver.log"  # nosec
-                )
-            else:
-                chrome_options = webdriver.chrome.options.Options()
-                chrome_options.add_argument("--headless")
-                chrome_options.add_argument("--window-size=1440,900")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--no-sandbox")
-                prefs = {"download.default_directory": download_folder}
-                chrome_options.add_experimental_option("prefs", prefs)
-                driver = webdriver.Chrome(options=chrome_options)
             driver.implicitly_wait(3)
-
             self.log("Logging in")
             driver.get(login_url)
             email_el = driver.find_element(By.ID, "email")

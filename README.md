@@ -31,7 +31,7 @@ Make sure you have the following python packages installed:
 - requests
 - selenium
 
-You will need `chromium-chromedriver` system package installed as well for selenium to be able to work with the default settings, or `geckodriver` if you choose firefox.
+You will need `chromium-chromedriver` system package installed as well for selenium.
 
 You may also have to have support for `xvfb` on your underlying O/S.
 
@@ -59,7 +59,6 @@ energiapro_gas_consumption:
   energiapro_password: !secret energiapro_password
   energiapro_bearer_token: !secret energiapro_bearer_token
   energiapro_installation_number: !secret energiapro_installation_number
-  # browser: firefox  # optional, defaults to chrome
   # ha_url: http://localhost:8123  # optional, in case hassplugin ha_url undefined
 ```
 
@@ -71,30 +70,9 @@ $ curl -XPOST -i -H "Content-Type: application/json"  http://<YOUR_APPDAEMON_IP>
 ```
 
 ## Load historical data
-
 #TODO
 
 # Troubleshhoting
-## Preferred driver
-`chromedriver` is the preferred web driver (and the default, unless you override it), given the site uses WebGL and that Firefox support through `geckodriver` causes issues in many instances.
-
-## Geckodriver not found
-If you have chosen to run with Firefox and not Chrome, you may see this message.
-
-```
-FileNotFoundError: [Errno 2] No such file or directory: 'geckodriver'
-Message: 'geckodriver' executable needs to be in PATH
-```
-If so, please download https://github.com/mozilla/geckodriver/releases and put in /usr/bin or somewhere in PATH
-
-## Firefox not installed
-
-```
-Message: Expected browser binary location, but unable to find binary in default location, no 'moz:firefoxOptions.binary' capability provided, and no binary flag set on the command line
-```
-
-Install Firefox
-
 ## No error, but no data either
 - Make sure you've configured your installation number within double quotes and that it is the right number.
 
