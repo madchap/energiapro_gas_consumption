@@ -71,18 +71,18 @@ class EnergiaproGasConsumption(hassapi.Hass):
             file.unlink()
 
     def post_to_entities(self, df):
-        if self.args["ha_url"]:
-            # get HA's url from app's first, if configured/overriden by user
-            self.log("Using ha_url from app's configuration")
-            ha_url = self.args["ha_url"]
-        elif self.config["plugins"]["HASS"]["ha_url"]:
-            # if not configured in app, get it from the hassplugin
-            self.log("Using ha_url from appdaemons.yaml configuration")
+        try:
             ha_url = self.config["plugins"]["HASS"]["ha_url"]
-        else:
-            self.log("No Home Assistant URL configured. Aborting.")
-            sys.exit(2)
-        self.log(f"HA url is {ha_url}")
+            if self.args["ha_url"]:
+                # get HA's url from app's first, if configured/overriden by user
+                self.log("Using ha_url from app's configuration")
+                ha_url = self.args["ha_url"]
+        except Exception as e:
+            self.log(
+                "No Home Assistant URL could be found. Please configure ha_url in the app's configuration. Aborting."
+            )
+            self.log(e)
+            return
 
         def _post_daily_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
@@ -96,7 +96,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 "attributes": {
                     "unit_of_measurement": "m³",
                     "device_class": "gas",
-                    "state_class": "total_increasing",
+                    "state_class": "total",
                 },
             }
 
@@ -118,12 +118,10 @@ class EnergiaproGasConsumption(hassapi.Hass):
                     "state_class": "total_increasing",
                 },
             }
-            self.log("payload {}".format(total_payload))
 
             r = requests.post(entity_url, json=total_payload, headers=headers)
             self.log("POST'ing status: {}".format(r.status_code))
 
-        self.log("BEFORE posting calls")
         _post_daily_consumption()
         _post_total_consumption()
 

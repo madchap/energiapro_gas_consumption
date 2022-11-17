@@ -24,14 +24,14 @@ There seems to be 2 postings a day to the portal. If you fetch the number somewh
 
 If you are not equipped with the LoraWan stuff, you should be able to contact EnergiaPro and request its installation and configuration at no charge.
 
-## AppDaemon's python pre-requisites
-Make sure you have the following installed:
+## AppDaemon's python and system packages pre-requisites
+Make sure you have the following python packages installed:
 - xlrd
 - pandas
 - requests
 - selenium
 
-You will need `chromedriver` installed as well for selenium to be able to work with the default settings, or `geckodriver` if you choose firefox.
+You will need `chromium-chromedriver` system package installed as well for selenium to be able to work with the default settings, or `geckodriver` if you choose firefox.
 
 You may also have to have support for `xvfb` on your underlying O/S.
 
