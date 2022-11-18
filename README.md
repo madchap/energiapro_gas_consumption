@@ -33,7 +33,7 @@ Make sure you have the following python packages installed:
 
 You will need `chromium-chromedriver` system package installed as well for selenium.
 
-You may also have to have support for `xvfb` on your underlying O/S.
+You may also have to have support for `xvfb` on your underlying O/S, if you are not running headless.
 
 ## Configuration
 ### secrets.yaml
@@ -69,13 +69,18 @@ The app registers an endpoint at `energiapro_gas_consumption`. If you want to tr
 $ curl -XPOST -i -H "Content-Type: application/json"  http://<YOUR_APPDAEMON_IP>:<YOUR_APPDAEMON_PORT>/api/appdaemon/energiapro_gas_consumption -d '{"action": "Call of Duty"}'
 ```
 
-## Load historical data
-#TODO
-
 # Troubleshhoting
 ## No error, but no data either
 - Make sure you've configured your installation number within double quotes and that it is the right number.
 
+## unknown error: net::ERR_NAME_NOT_RESOLVED (Session info: headless chrome=<VERSION>)
+That's a good question. If you have an answer, please let me know :-)
+Workaround: Install `xvfb` as system package and comment out the following around line 135:
+
+```
+chrome_options.add_argument("--headless")
+```
+
 # TODO:
-- check not reloading same date several times
 - how to backdate for previous day? (e.g. come up with good SQL probably)
+- Load historical data

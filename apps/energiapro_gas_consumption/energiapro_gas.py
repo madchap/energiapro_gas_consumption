@@ -28,8 +28,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
     def initialize(self):
         # register an API endpoint for manual triggering
-        # call with something like
-        # $ curl -XPOST -i -H "Content-Type: application/json" http://localhost:5050/api/appdaemon/energiapro_gas_consumption -d '{"action": "Gazzz"}'
         self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
         self.run_at_sunrise(self.get_gas_data)
 
@@ -65,10 +63,13 @@ class EnergiaproGasConsumption(hassapi.Hass):
         self.log("Cleaning up files")
         p = Path(download_folder)
         files_to_remove = list(
-            p.glob(f"*{self.args['energiapro_installation_number']}*.xls")
+            # p.glob(f"*{self.args['energiapro_installation_number']}*.xls")
+            p.glob("*")
         )
         for file in files_to_remove:
             file.unlink()
+
+        p.rmdir()
 
     def post_to_entities(self, df):
         try:
@@ -91,6 +92,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             last_daily_measure = df["QUANTITE EN M3"].iloc[-1]
+            self.log(f"Daily quantity {last_daily_measure}")
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -110,6 +112,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             total_measure = int(df["RELEVE"].iloc[-1])
+            self.log(f"Total quantity {total_measure}")
             total_payload = {
                 "state": total_measure,
                 "attributes": {
@@ -126,7 +129,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
         _post_total_consumption()
 
     def get_gas_data(self):
-        base_url = "https://www.holdigaz.ch/espace-client"
+        base_url = self.args.get("energiapro_base_url")
         login_url = f"{base_url}/views/view.login.php"
         csv_base_export_link = f"{base_url}/views/view.statistiques.lpn.php?a="
 
@@ -135,7 +138,10 @@ class EnergiaproGasConsumption(hassapi.Hass):
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--window-size=1024,768")
             chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--no-sandbox")
+            if self.args.get("energiapro_no_ssl_check") == "true":
+                chrome_options.add_argument("--ignore-certificate-errors")
             prefs = {"download.default_directory": download_folder}
             chrome_options.add_experimental_option("prefs", prefs)
             driver = webdriver.Chrome(options=chrome_options)
