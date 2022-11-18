@@ -55,6 +55,8 @@ Define your app like the following:
 energiapro_gas_consumption:
   module: energiapro_gas
   class: EnergiaproGasConsumption
+  energiapro_base_url: https://www.holdigaz.ch/espace-client
+  # energiapro_no_ssl_check: true
   energiapro_email: !secret energiapro_email
   energiapro_password: !secret energiapro_password
   energiapro_bearer_token: !secret energiapro_bearer_token
