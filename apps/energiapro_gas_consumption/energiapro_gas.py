@@ -109,7 +109,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
         _post_daily_consumption()
         _post_total_consumption()
 
-    def get_gas_data(self):
+    def get_gas_data(self, kwargs):
         base_url = self.args.get("energiapro_base_url")
         login_url = f"{base_url}/views/view.login.php"
         login_controller_link = f"{base_url}/controllers/controller.login.php"
