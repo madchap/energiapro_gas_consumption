@@ -45,7 +45,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
         self.post_to_entities(df)
 
     def cleanup_files(self):
-        self.log("Cleaning up files")
         p = Path(download_folder)
         files_to_remove = list(p.glob("*"))
         for file in files_to_remove:
@@ -56,12 +55,10 @@ class EnergiaproGasConsumption(hassapi.Hass):
     def post_to_entities(self, df):
         def _post_daily_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
-            self.log("POST'ing data to {}".format(entity_url))
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             last_daily_measure = df["QUANTITE EN M3"].iloc[-1]
-            self.log(f"Daily quantity {last_daily_measure}")
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -71,16 +68,14 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 },
             }
             r = requests.post(entity_url, json=daily_payload, headers=headers)
-            self.log("POST'ing status: {}".format(r.status_code))
+            self.log(f"POST'ed {last_daily_measure} to {entity_url}")
 
         def _post_total_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_total"
-            self.log("POST'ing data to {}".format(entity_url))
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             total_measure = int(df["RELEVE"].iloc[-1])
-            self.log(f"Total quantity {total_measure}")
             total_payload = {
                 "state": total_measure,
                 "attributes": {
@@ -90,7 +85,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 },
             }
             r = requests.post(entity_url, json=total_payload, headers=headers)
-            self.log("POST'ing status: {}".format(r.status_code))
+            self.log(f"POST'ed {total_measure} to {entity_url}")
 
         try:
             ha_url = self.config["plugins"]["HASS"]["ha_url"]
