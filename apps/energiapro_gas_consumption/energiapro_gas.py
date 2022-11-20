@@ -7,14 +7,13 @@ import requests
 
 
 class EnergiaproGasConsumption(hassapi.Hass):
-    global download_folder
-    download_folder = tempfile.mkdtemp()
+    download_folder = "not set"
 
     async def my_callback(self, request, kwargs):
         data = await request.json()
         self.log(data)
         response = {"message": "Triggered!"}
-        self.get_gas_data()
+        self.get_gas_data(kwargs)
 
         return response, 200
 
@@ -110,6 +109,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
         _post_total_consumption()
 
     def get_gas_data(self, kwargs):
+        global download_folder
         base_url = self.args.get("energiapro_base_url")
         login_url = f"{base_url}/views/view.login.php"
         login_controller_link = f"{base_url}/controllers/controller.login.php"
@@ -130,6 +130,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
             return
 
         try:
+            download_folder = tempfile.mkdtemp()
             with requests.Session() as s:
                 s.get(login_url)
                 r = s.post(login_controller_link, data=login_payload)
@@ -150,6 +151,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                     self.log("File downloaded")
 
                 self.convert_xls_to_csv(local_filename)
-                self.cleanup_files()
         except Exception as e:
             self.log(e)
+        finally:
+            self.cleanup_files()
