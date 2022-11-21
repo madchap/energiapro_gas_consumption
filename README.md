@@ -62,6 +62,8 @@ energiapro_gas_consumption:
   # ha_url: http://localhost:8123  # optional, in case hassplugin ha_url undefined
 ```
 
+The `energiapro_bearer_token` refers to a long-lived Home Assistant token, to post the result.
+
 ## Manually trigger the app
 The app can register an endpoint at `energiapro_gas_consumption`, which was mainly used during development. It's been commented for "production".
 
