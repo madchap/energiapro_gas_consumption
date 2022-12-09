@@ -21,13 +21,14 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
     def initialize(self):
         # register an API endpoint for manual triggering
-        self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+        # self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+
         # minutes = 60
         # self.log(f"Will fetch gas data every {minutes} minutes")
         # self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
         mytime = "10:00:00"
         self.log(f"Will fetch gas data every day at {mytime}")
-        self.run_daily(self.get_gas_data, "10:00:00")
+        self.run_daily(self.get_gas_data, mytime)
         # self.run_at_sunrise(self.get_gas_data)
 
     def convert_xls_to_csv(self, xls_filename):
