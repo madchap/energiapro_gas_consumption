@@ -31,6 +31,7 @@ Make sure you have the following python packages installed:
 - xlrd
 - pandas
 - requests
+- beautifulsoup4
 
 ## Configuration
 ### secrets.yaml
