@@ -4,6 +4,8 @@ import pandas as pd
 import tempfile
 from datetime import datetime
 import requests
+from bs4 import BeautifulSoup
+import re
 
 
 class EnergiaproGasConsumption(hassapi.Hass):
@@ -19,10 +21,13 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
     def initialize(self):
         # register an API endpoint for manual triggering
-        # self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
-        minutes = 60
-        self.log(f"Will fetch gas data every {minutes} minutes")
-        self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
+        self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+        # minutes = 60
+        # self.log(f"Will fetch gas data every {minutes} minutes")
+        # self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
+        mytime = "10:00:00"
+        self.log(f"Will fetch gas data every day at {mytime}")
+        self.run_daily(self.get_gas_data, "10:00:00")
         # self.run_at_sunrise(self.get_gas_data)
 
     def convert_xls_to_csv(self, xls_filename):
@@ -108,7 +113,29 @@ class EnergiaproGasConsumption(hassapi.Hass):
         base_url = self.args.get("energiapro_base_url")
         login_url = f"{base_url}/views/view.login.php"
         login_controller_link = f"{base_url}/controllers/controller.login.php"
+        view_stats_link = f"{base_url}/views/view.statistiques.lpn.ajax.php"
         export_controller_link = f"{base_url}/controllers/controller.export.xls.php"
+
+        def _get_xss_random_code(r, step):
+            soup = BeautifulSoup(r.text, "html.parser")
+
+            if step == "login":
+                try:
+                    xss_random_code = re.search(
+                        r"xss-rand-login':\s+(\d+),", soup.prettify()
+                    ).group(1)
+                    return xss_random_code
+                except Exception as e:
+                    self.log("Could not get login XSS random code")
+                    self.log(e)
+            elif step == "export":
+                try:
+                    form = soup.find("form", {"class": "fileDownloadForm"})
+                    xss_random_code = form.find("input", {"id": "XSS-rand"})["value"]
+                    return xss_random_code
+                except Exception as e:
+                    self.log("Could not get export XSS random code")
+                    self.log(e)
 
         try:
             login_payload = {
@@ -127,7 +154,10 @@ class EnergiaproGasConsumption(hassapi.Hass):
         try:
             download_folder = tempfile.mkdtemp()
             with requests.Session() as s:
-                s.get(login_url)
+                lr = s.get(login_url)
+                xss_random_code_login = _get_xss_random_code(lr, "login")
+                login_payload["xss-rand-login"] = xss_random_code_login
+
                 r = s.post(login_controller_link, data=login_payload)
                 local_filename = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.xls"
 
@@ -136,14 +166,18 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 ):  # The controller 'true' resp is the real thing
                     self.log("Login successful")
 
+                    dr = s.get(view_stats_link)
+                    xss_random_code_export = _get_xss_random_code(dr, "export")
+                    export_payload["XSS-rand"] = xss_random_code_export
                     with s.post(
                         export_controller_link, data=export_payload, stream=True
                     ) as dl:
+
                         dl.raise_for_status()
                         with open(local_filename, "wb") as f:
                             for c in dl.iter_content(chunk_size=8192):
                                 f.write(c)
-                    self.log("File downloaded")
+                        self.log("File downloaded")
 
                 self.convert_xls_to_csv(local_filename)
         except Exception as e:
