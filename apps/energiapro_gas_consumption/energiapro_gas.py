@@ -157,9 +157,26 @@ class EnergiaproGasConsumption(hassapi.Hass):
             with requests.Session() as s:
                 lr = s.get(login_url)
                 xss_random_code_login = _get_xss_random_code(lr, "login")
+                # hidden_hash = soup.find("input", {'id': 'hash'})
+                # self.log(f"hash is {hidden_hash}")
                 login_payload["xss-rand-login"] = xss_random_code_login
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "Accept": "*/*",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Sec-Ch-Ua-Platform": "Linux",
+                    "Origin": "https://www.holdigaz.ch",
+                    "Sec-Fetch-Site": "same-origin",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Dest": "empty",
+                    "Referer": "https://www.holdigaz.ch/espace-client/views/view.login.php",
+                    "Accept-Encoding": "gzip, deflate",
+                    "Accept-Language": "en-US,en;q=0.9,fr;q=0.8,es;q=0.7,zu;q=0.6,de;q=0.5,it;q=0.4",
+                    "Cookie": f"espace-client={s.cookies.get('espace-client')}",
+                }
 
-                r = s.post(login_controller_link, data=login_payload)
+                r = s.post(login_controller_link, data=login_payload, headers=headers)
                 local_filename = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.xls"
 
                 if (
@@ -167,11 +184,19 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 ):  # The controller 'true' resp is the real thing
                     self.log("Login successful")
 
-                    dr = s.get(view_stats_link)
+                    headers["Sec-Fetch-Mode"] = "navigate"
+                    headers["Sec-Fetch-Dest"] = "document"
+                    headers[
+                        "Referer"
+                    ] = "https://www.holdigaz.ch/espace-client/views/view.espace-client.php"
+                    dr = s.get(view_stats_link, headers=headers)
                     xss_random_code_export = _get_xss_random_code(dr, "export")
                     export_payload["XSS-rand"] = xss_random_code_export
                     with s.post(
-                        export_controller_link, data=export_payload, stream=True
+                        export_controller_link,
+                        data=export_payload,
+                        stream=True,
+                        headers=headers,
                     ) as dl:
 
                         dl.raise_for_status()
@@ -179,7 +204,10 @@ class EnergiaproGasConsumption(hassapi.Hass):
                             for c in dl.iter_content(chunk_size=8192):
                                 f.write(c)
                         self.log("File downloaded")
-
+                else:
+                    self.log(
+                        f"login failed with error code {r.status_code} and text as {r.text}"
+                    )
                 self.convert_xls_to_csv(local_filename)
         except Exception as e:
             self.log(e)
