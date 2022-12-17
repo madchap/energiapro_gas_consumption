@@ -208,7 +208,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
                     self.log(
                         f"login failed with error code {r.status_code} and text as {r.text}"
                     )
-                    self.log(s.headers)
                 self.convert_xls_to_csv(local_filename)
         except Exception as e:
             self.log(e)
