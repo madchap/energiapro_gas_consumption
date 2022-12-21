@@ -1,5 +1,8 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 
+# HACS configuration
+Make sure that you [have the AppDaemon discovery and tracking](https://hacs.xyz/docs/categories/appdaemon_apps) enabled for HACS.
+
 # EnergiaPro gas consumption readings
 This appdaemon will go fetch your gas data from EnergiaPro's customer portal, which you would find at https://www.holdigaz.ch/espace-client/views/view.login.php
 
