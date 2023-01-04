@@ -112,6 +112,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
     def get_gas_data(self, kwargs):
         global download_folder
         base_url = self.args.get("energiapro_base_url")
+        landing_index = f"{base_url}/index.php"
         login_url = f"{base_url}/views/view.login.php"
         login_controller_link = f"{base_url}/controllers/controller.login.php"
         view_stats_link = f"{base_url}/views/view.statistiques.lpn.ajax.php"
@@ -155,27 +156,33 @@ class EnergiaproGasConsumption(hassapi.Hass):
         try:
             download_folder = tempfile.mkdtemp()
             with requests.Session() as s:
-                lr = s.get(login_url)
+                headers = {
+                    "Sec-Fetch-Site": "same-origin",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Referer": "https://www.holdigaz.ch/espace-client/index.php",
+                }
+                # initiate session
+                s.get(landing_index, headers=headers)
+                s.headers.update(
+                    {"Cookie": f"espace-client={s.cookies.get('espace-client')}"}
+                )
+
+                # login
+                # get xss code
+                lr = s.get(login_url, headers=headers)
                 xss_random_code_login = _get_xss_random_code(lr, "login")
-                # hidden_hash = soup.find("input", {'id': 'hash'})
+                # hidden_hash = soup.find("input", {'id': 'hash'}).get('value')  # cannot get, JS loaded.
                 # self.log(f"hash is {hidden_hash}")
                 login_payload["xss-rand-login"] = xss_random_code_login
                 headers = {
-                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
-                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "Accept": "*/*",
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Sec-Ch-Ua-Platform": "Linux",
-                    "Origin": "https://www.holdigaz.ch",
                     "Sec-Fetch-Site": "same-origin",
                     "Sec-Fetch-Mode": "cors",
                     "Sec-Fetch-Dest": "empty",
                     "Referer": "https://www.holdigaz.ch/espace-client/views/view.login.php",
-                    "Accept-Encoding": "gzip, deflate",
-                    "Accept-Language": "en-US,en;q=0.9,fr;q=0.8,es;q=0.7,zu;q=0.6,de;q=0.5,it;q=0.4",
-                    "Cookie": f"espace-client={s.cookies.get('espace-client')}",
+                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-Requested-With": "XMLHttpRequest",
                 }
-
                 r = s.post(login_controller_link, data=login_payload, headers=headers)
                 local_filename = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.xls"
 
