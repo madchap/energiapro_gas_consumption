@@ -118,6 +118,11 @@ class EnergiaproGasConsumption(hassapi.Hass):
         view_stats_link = f"{base_url}/views/view.statistiques.lpn.ajax.php"
         export_controller_link = f"{base_url}/controllers/controller.export.xls.php"
 
+        def _get_meta_anti_csrf(r):
+            soup = BeautifulSoup(r.text, "html.parser")
+            anticsrf = soup.find("meta", attrs={"name": "csrf-token"})
+            return anticsrf.attrs.get("content")
+
         def _get_xss_random_code(r, step):
             soup = BeautifulSoup(r.text, "html.parser")
 
@@ -182,6 +187,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                     "Referer": "https://www.holdigaz.ch/espace-client/views/view.login.php",
                     "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
                     "X-Requested-With": "XMLHttpRequest",
+                    "anti-csrf-token": _get_meta_anti_csrf(lr),
                 }
                 r = s.post(login_controller_link, data=login_payload, headers=headers)
                 local_filename = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.xls"
