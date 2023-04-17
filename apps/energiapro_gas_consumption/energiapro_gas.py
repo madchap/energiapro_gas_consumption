@@ -12,8 +12,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
     download_folder = "not set"
 
     async def my_callback(self, request, kwargs):
-        data = await request.json()
-        self.log(data)
         response = {"message": "Triggered!"}
         self.get_gas_data(kwargs)
 
@@ -94,11 +92,12 @@ class EnergiaproGasConsumption(hassapi.Hass):
             self.log(f"POST'ed {total_measure} to {entity_url}")
 
         try:
-            ha_url = self.config["plugins"]["HASS"]["ha_url"]
             if self.args["ha_url"]:
                 # get HA's url from app's first, if configured/overriden by user
                 self.log("Using ha_url from app's configuration")
                 ha_url = self.args["ha_url"]
+            else:
+                ha_url = self.config["plugins"]["HASS"]["ha_url"]
         except Exception as e:
             self.log(
                 "No Home Assistant URL could be found. Please configure ha_url in the app's configuration. Aborting."
