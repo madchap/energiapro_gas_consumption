@@ -2,7 +2,7 @@ import appdaemon.plugins.hass.hassapi as hassapi
 from pathlib import Path
 import pandas as pd
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -63,6 +63,16 @@ class EnergiaproGasConsumption(hassapi.Hass):
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             last_daily_measure = df["QUANTITE EN M3"].iloc[-1]
+            last_daily_date = df["DATE"].iloc[-1]
+            last_data_date = datetime.strptime(last_daily_date, "%d/%m/%Y")
+
+            # if last measure is older than yesterday, zero it out
+            # Remember we process 1 day old data anyways
+            # naively account for time component with <2d
+            if not (datetime.now() - last_data_date < timedelta(days=2)):
+                self.log(f"Last measure is from {last_data_date}, so setting to 0.")
+                last_daily_measure = 0
+
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -71,7 +81,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                     "state_class": "total",
                 },
             }
-            r = requests.post(entity_url, json=daily_payload, headers=headers)
+            requests.post(entity_url, json=daily_payload, headers=headers)
             self.log(f"POST'ed {last_daily_measure} to {entity_url}")
 
         def _post_total_consumption():
