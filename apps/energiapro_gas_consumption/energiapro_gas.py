@@ -1,16 +1,11 @@
 import appdaemon.plugins.hass.hassapi as hassapi
-from pathlib import Path
-import pandas as pd
-import tempfile
 from datetime import datetime, timedelta
 import requests
-from bs4 import BeautifulSoup
-import re
+import bcrypt
+import json
 
 
 class EnergiaproGasConsumption(hassapi.Hass):
-    download_folder = "not set"
-
     async def my_callback(self, request, kwargs):
         response = {"message": "Triggered!"}
         self.get_gas_data(kwargs)
@@ -29,48 +24,19 @@ class EnergiaproGasConsumption(hassapi.Hass):
         self.run_daily(self.get_gas_data, mytime)
         # self.run_at_sunrise(self.get_gas_data)
 
-    def convert_xls_to_csv(self, xls_filename):
-        xls_data = pd.read_excel(xls_filename, engine="xlrd")
-        csv_file = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.csv"
-
-        xls_data.to_csv(
-            csv_file,
-            index=None,
-            header=True,
-        )
-        df = pd.DataFrame(pd.read_csv(csv_file))
-
-        if len(df.columns) == 0:
-            self.log(
-                f"Didn't seem to get any data in the Excel file... count is {df.count()}."
-            )
-            self.log("Check your configuration (installation number).")
-
-        self.post_to_entities(df)
-
-    def cleanup_files(self):
-        p = Path(download_folder)
-        files_to_remove = list(p.glob("*"))
-        for file in files_to_remove:
-            file.unlink()
-
-        p.rmdir()
-
-    def post_to_entities(self, df):
+    def post_to_entities(self, lpn_data):
         def _post_daily_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            last_daily_measure = df["QUANTITE EN M3"].iloc[-1]
-            last_daily_date = df["DATE"].iloc[-1]
-            last_data_date = datetime.strptime(last_daily_date, "%d/%m/%Y")
-
+            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
+            last_daily_measure = lpn_data[0].get("quantite_m3")
             # if last measure is older than yesterday, zero it out
             # Remember we process 1 day old data anyways
             # naively account for time component with <2d
-            if not (datetime.now() - last_data_date < timedelta(days=2)):
-                self.log(f"Last measure is from {last_data_date}, so setting to 0.")
+            if not (datetime.now() - record_date < timedelta(days=2)):
+                self.log(f"Last measure is from {record_date}, so setting to 0.")
                 last_daily_measure = 0
 
             daily_payload = {
@@ -84,12 +50,37 @@ class EnergiaproGasConsumption(hassapi.Hass):
             requests.post(entity_url, json=daily_payload, headers=headers)
             self.log(f"POST'ed {last_daily_measure} to {entity_url}")
 
+        def _post_daily_kwh_consumption():
+            entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_kwh_daily"
+            token = "Bearer {}".format(self.args["energiapro_bearer_token"])
+            headers = {"Authorization": token, "Content-Type": "application/json"}
+
+            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
+            last_daily_measure = lpn_data[0].get("consommation_kw_h")
+            # if last measure is older than yesterday, zero it out
+            # Remember we process 1 day old data anyways
+            # naively account for time component with <2d
+            if not (datetime.now() - record_date < timedelta(days=2)):
+                self.log(f"Last measure is from {record_date}, so setting to 0.")
+                last_daily_measure = 0
+
+            daily_payload = {
+                "state": last_daily_measure,
+                "attributes": {
+                    "unit_of_measurement": "kwh",
+                    "device_class": "gas",
+                    "state_class": "total",
+                },
+            }
+            requests.post(entity_url, json=daily_payload, headers=headers)
+            self.log(f"POST'ed {last_daily_measure} to {entity_url}")
+
         def _post_total_consumption():
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_total"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            total_measure = int(df["RELEVE"].iloc[-1])
+            total_measure = lpn_data[0].get("index_m3")
             total_payload = {
                 "state": total_measure,
                 "attributes": {
@@ -116,122 +107,78 @@ class EnergiaproGasConsumption(hassapi.Hass):
             return
 
         _post_daily_consumption()
+        _post_daily_kwh_consumption()
         _post_total_consumption()
 
     def get_gas_data(self, kwargs):
-        global download_folder
-        base_url = self.args.get("energiapro_base_url")
-        landing_index = f"{base_url}/index.php"
-        login_url = f"{base_url}/views/view.login.php"
-        login_controller_link = f"{base_url}/controllers/controller.login.php"
-        view_stats_link = f"{base_url}/views/view.statistiques.lpn.ajax.php"
-        export_controller_link = f"{base_url}/controllers/controller.export.xls.php"
+        hashpw = self.get_hashed_passwd
+        token = self.get_token(hashpw)
+        lpn_data = self.get_lpn_data(token)
 
-        def _get_meta_anti_csrf(r):
-            soup = BeautifulSoup(r.text, "html.parser")
-            anticsrf = soup.find("meta", attrs={"name": "csrf-token"})
-            return anticsrf.attrs.get("content")
+        if len(lpn_data) == 1:
+            self.post_to_entities(lpn_data)
+        else:
+            self.log("Got multiple lpn records, need only 1!")
 
-        def _get_xss_random_code(r, step):
-            soup = BeautifulSoup(r.text, "html.parser")
+    def get_hashed_passwd(self):
+        salt = bcrypt.gensalt(rounds=11)
+        hashpw = bcrypt.hashpw(self.args.get(b"energiapro_api_secret_seed"), salt)
 
-            if step == "login":
-                try:
-                    xss_random_code = re.search(
-                        r"xss-rand-login':\s+(\d+),", soup.prettify()
-                    ).group(1)
-                    return xss_random_code
-                except Exception as e:
-                    self.log("Could not get login XSS random code")
-                    self.log(e)
-            elif step == "export":
-                try:
-                    form = soup.find("form", {"class": "fileDownloadForm"})
-                    xss_random_code = form.find("input", {"id": "XSS-rand"})["value"]
-                    return xss_random_code
-                except Exception as e:
-                    self.log("Could not get export XSS random code")
-                    self.log(e)
+        return hashpw
+
+    def get_token(self, hashpw):
+        base_url = self.args.get("energiapro_base_api_url")
+        auth_ep = f"{base_url}/authenticate.php"
+
+        payload = {
+            "username": self.args.get("energiapro_api_username"),
+            "secret_key": hashpw,
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         try:
-            login_payload = {
-                "email": self.args["energiapro_email"],
-                "password": self.args["energiapro_password"],
-            }
-
-            export_payload = {
-                "instNum": self.args["energiapro_installation_number"],
-                "adrAbo": self.args["energiapro_client_number"],
-            }
-        except Exception as config_e:
-            self.log("There was a problem getting configuration values. Aborting.")
-            return
-
-        try:
-            download_folder = tempfile.mkdtemp()
-            with requests.Session() as s:
-                headers = {
-                    "Sec-Fetch-Site": "same-origin",
-                    "Sec-Fetch-Mode": "navigate",
-                    "Sec-Fetch-Dest": "document",
-                    "Referer": "https://www.holdigaz.ch/espace-client/index.php",
-                }
-                # initiate session
-                s.get(landing_index, headers=headers)
-                s.headers.update(
-                    {"Cookie": f"espace-client={s.cookies.get('espace-client')}"}
-                )
-
-                # login
-                # get xss code
-                lr = s.get(login_url, headers=headers)
-                xss_random_code_login = _get_xss_random_code(lr, "login")
-                # hidden_hash = soup.find("input", {'id': 'hash'}).get('value')  # cannot get, JS loaded.
-                # self.log(f"hash is {hidden_hash}")
-                login_payload["xss-rand-login"] = xss_random_code_login
-                headers = {
-                    "Sec-Fetch-Site": "same-origin",
-                    "Sec-Fetch-Mode": "cors",
-                    "Sec-Fetch-Dest": "empty",
-                    "Referer": "https://www.holdigaz.ch/espace-client/views/view.login.php",
-                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "X-Requested-With": "XMLHttpRequest",
-                    "anti-csrf-token": _get_meta_anti_csrf(lr),
-                }
-                r = s.post(login_controller_link, data=login_payload, headers=headers)
-                local_filename = f"{download_folder}/energiapro_{self.args['energiapro_installation_number']}_data.xls"
-
-                if (
-                    r.status_code == 200 and r.text == "true"
-                ):  # The controller 'true' resp is the real thing
-                    self.log("Login successful")
-
-                    headers["Sec-Fetch-Mode"] = "navigate"
-                    headers["Sec-Fetch-Dest"] = "document"
-                    headers[
-                        "Referer"
-                    ] = "https://www.holdigaz.ch/espace-client/views/view.espace-client.php"
-                    dr = s.get(view_stats_link, headers=headers)
-                    xss_random_code_export = _get_xss_random_code(dr, "export")
-                    export_payload["XSS-rand"] = xss_random_code_export
-                    with s.post(
-                        export_controller_link,
-                        data=export_payload,
-                        stream=True,
-                        headers=headers,
-                    ) as dl:
-
-                        dl.raise_for_status()
-                        with open(local_filename, "wb") as f:
-                            for c in dl.iter_content(chunk_size=8192):
-                                f.write(c)
-                        self.log("File downloaded")
-                else:
-                    self.log(
-                        f"login failed with error code {r.status_code} and text as {r.text}"
+            r = requests.post(auth_ep, data=payload, headers=headers)
+            if r.status_code == 200:
+                data_without_bom = r.text.lstrip("\ufeff")
+                json_data = json.loads(data_without_bom)
+                if json_data["errorCode"] != 0:
+                    raise Exception(
+                        f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
                     )
-                self.convert_xls_to_csv(local_filename)
+                token = json_data["token"]
+
+                return token
         except Exception as e:
-            self.log(e)
-        finally:
-            self.cleanup_files()
+            self.log("Failure in generating token from secret hash!")
+
+    def get_lpn_data(self, token):
+        base_url = self.args.get("energiapro_base_api_url")
+        api_ep = f"{base_url}/index.php"
+        start_date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        end_date = datetime.today().strftime("%Y-%m-%d")
+
+        payload = {
+            "client_id": self.args.get("energiapro_client_number"),
+            "scope": "lpn-json",
+            "num_inst": self.args.get("energiapro_installation_number"),
+            "date_debut": start_date,
+            "date_fin": end_date,
+        }
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {token}",
+        }
+
+        try:
+            r = requests.post(api_ep + "index.php", data=payload, headers=headers)
+            if r.status_code == 200:
+                data_without_bom = r.text.lstrip("\ufeff")
+                json_data = json.loads(data_without_bom)
+                if "errorCode" in json_data and json_data["errorCode"] != "0":
+                    raise Exception(
+                        f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
+                    )
+
+                return json_data
+        except Exception as e:
+            self.log("Error getting lpn data" + e)
