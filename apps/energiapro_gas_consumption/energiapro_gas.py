@@ -14,7 +14,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
     def initialize(self):
         # register an API endpoint for manual triggering
-        # self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+        self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
 
         # minutes = 60
         # self.log(f"Will fetch gas data every {minutes} minutes")
@@ -111,74 +111,97 @@ class EnergiaproGasConsumption(hassapi.Hass):
         _post_total_consumption()
 
     def get_gas_data(self, kwargs):
-        hashpw = self.get_hashed_passwd
-        token = self.get_token(hashpw)
-        lpn_data = self.get_lpn_data(token)
+        def get_hashed_passwd():
+            try:
+                salt = bcrypt.gensalt(rounds=11)
+                seed = self.args.get("energiapro_api_secret_seed")
+                hashpw = bcrypt.hashpw(seed.encode(), salt)
+            except Exception as e:
+                self.log(e)
+
+            return hashpw
+
+        def get_token(hashpw):
+            auth_ep = f"{base_url}/authenticate.php"
+
+            payload = {
+                "username": self.args.get("energiapro_api_username"),
+                "secret_key": hashpw,
+            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+            try:
+                r = requests.post(auth_ep, data=payload, headers=headers)
+                if r.status_code == 200:
+                    data_without_bom = r.text.lstrip("\ufeff")
+                    json_data = json.loads(data_without_bom)
+                    if json_data["errorCode"] != "0":
+                        raise Exception(
+                            f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
+                        )
+                    token = json_data["token"]
+
+                    return token
+                else:
+                    self.log(f"return code was {r.status_code} with {r.text}")
+            except Exception as e:
+                self.log("Failure in generating token from secret hash!")
+                self.log(e)
+
+        def get_lpn_data(token):
+            api_ep = f"{base_url}/index.php"
+            start_date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+            end_date = datetime.today().strftime("%Y-%m-%d")
+
+            payload = {
+                "client_id": self.args.get("energiapro_client_number"),
+                "scope": "lpn-json",
+                "num_inst": self.args.get("energiapro_installation_number"),
+                "date_debut": start_date,
+                "date_fin": end_date,
+            }
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": f"Bearer {token}",
+            }
+
+            try:
+                r = requests.post(api_ep, data=payload, headers=headers)
+                if r.status_code == 200:
+                    data_without_bom = r.text.lstrip("\ufeff")
+                    json_data = json.loads(data_without_bom)
+                    if "errorCode" in json_data and json_data["errorCode"] != "0":
+                        self.notifier("aaaaah")
+                        raise Exception(
+                            f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
+                        )
+
+                    self.log(json_data)
+                    return json_data
+                else:
+                    self.log(f"return code was {r.status_code} with {r.text}")
+            except Exception as e:
+                self.log(e)
+
+        base_url = self.args["energiapro_api_base_url"]
+        hashpw = get_hashed_passwd()
+        token = get_token(hashpw)
+        lpn_data = get_lpn_data(token)
+
+        if lpn_data is None:
+            # exception
+            return
 
         if len(lpn_data) == 1:
             self.post_to_entities(lpn_data)
         else:
             self.log("Got multiple lpn records, need only 1!")
 
-    def get_hashed_passwd(self):
-        salt = bcrypt.gensalt(rounds=11)
-        hashpw = bcrypt.hashpw(self.args.get(b"energiapro_api_secret_seed"), salt)
+    def notifier(self, kwargs):
+        # friendly_name = self.get_state(kwargs['entity_name'], attribute='friendly_name')
 
-        return hashpw
+        title = "EnergiaPro!"
+        # message = "{} has been open for more than {} seconds.".format(friendly_name, self.args['ttl'])
+        message = "Test msg"
 
-    def get_token(self, hashpw):
-        base_url = self.args.get("energiapro_base_api_url")
-        auth_ep = f"{base_url}/authenticate.php"
-
-        payload = {
-            "username": self.args.get("energiapro_api_username"),
-            "secret_key": hashpw,
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        try:
-            r = requests.post(auth_ep, data=payload, headers=headers)
-            if r.status_code == 200:
-                data_without_bom = r.text.lstrip("\ufeff")
-                json_data = json.loads(data_without_bom)
-                if json_data["errorCode"] != 0:
-                    raise Exception(
-                        f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
-                    )
-                token = json_data["token"]
-
-                return token
-        except Exception as e:
-            self.log("Failure in generating token from secret hash!")
-
-    def get_lpn_data(self, token):
-        base_url = self.args.get("energiapro_base_api_url")
-        api_ep = f"{base_url}/index.php"
-        start_date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = datetime.today().strftime("%Y-%m-%d")
-
-        payload = {
-            "client_id": self.args.get("energiapro_client_number"),
-            "scope": "lpn-json",
-            "num_inst": self.args.get("energiapro_installation_number"),
-            "date_debut": start_date,
-            "date_fin": end_date,
-        }
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Bearer {token}",
-        }
-
-        try:
-            r = requests.post(api_ep + "index.php", data=payload, headers=headers)
-            if r.status_code == 200:
-                data_without_bom = r.text.lstrip("\ufeff")
-                json_data = json.loads(data_without_bom)
-                if "errorCode" in json_data and json_data["errorCode"] != "0":
-                    raise Exception(
-                        f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
-                    )
-
-                return json_data
-        except Exception as e:
-            self.log("Error getting lpn data" + e)
+        self.call_service("notify/notify", title=title, message=message)
