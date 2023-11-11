@@ -19,7 +19,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
         # minutes = 60
         # self.log(f"Will fetch gas data every {minutes} minutes")
         # self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
-        mytime = "10:00:00"
+        mytime = "11:00:00"
         self.log(f"Will fetch gas data every day at {mytime}")
         self.run_daily(self.get_gas_data, mytime)
         # self.run_at_sunrise(self.get_gas_data)
@@ -29,16 +29,17 @@ class EnergiaproGasConsumption(hassapi.Hass):
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
-
-            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
             last_daily_measure = lpn_data[0].get("quantite_m3")
+
+            """
+            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
             # if last measure is older than yesterday, zero it out
             # Remember we process 1 day old data anyways
             # naively account for time component with <2d
             if not (datetime.now() - record_date < timedelta(days=2)):
                 self.log(f"Last measure is from {record_date}, so setting to 0.")
                 last_daily_measure = 0
-
+            """
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -55,14 +56,16 @@ class EnergiaproGasConsumption(hassapi.Hass):
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
             last_daily_measure = lpn_data[0].get("consommation_kw_h")
+            """
+            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
             # if last measure is older than yesterday, zero it out
             # Remember we process 1 day old data anyways
             # naively account for time component with <2d
             if not (datetime.now() - record_date < timedelta(days=2)):
                 self.log(f"Last measure is from {record_date}, so setting to 0.")
                 last_daily_measure = 0
+            """
 
             daily_payload = {
                 "state": last_daily_measure,
@@ -111,6 +114,27 @@ class EnergiaproGasConsumption(hassapi.Hass):
         _post_total_consumption()
 
     def get_gas_data(self, kwargs):
+        def _post(ep, payload, headers):
+            try:
+                r = requests.post(ep, data=payload, headers=headers)
+                if r.status_code == 200:
+                    data_without_bom = r.text.lstrip("\ufeff")
+                    json_data = json.loads(data_without_bom)
+                    if "errorCode" in json_data and json_data["errorCode"] != "0":
+                        error_message = (
+                            f"{json_data['error']} ({json_data['errorCode']})"
+                        )
+                        self.notifier(error_message)
+                        raise Exception(
+                            f"Backend returned non-zero error code: {error_message}"
+                        )
+                    return json_data
+                else:
+                    self.log(f"return code was {r.status_code} with {r.text}")
+            except Exception as e:
+                self.log(f"Response return code error")
+                self.log(e)
+
         def get_hashed_passwd():
             try:
                 salt = bcrypt.gensalt(rounds=11)
@@ -123,33 +147,18 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
         def get_token(hashpw):
             auth_ep = f"{base_url}/authenticate.php"
-
             payload = {
                 "username": self.args.get("energiapro_api_username"),
                 "secret_key": hashpw,
             }
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
+            json_r = _post(auth_ep, payload, headers)
 
-            try:
-                r = requests.post(auth_ep, data=payload, headers=headers)
-                if r.status_code == 200:
-                    data_without_bom = r.text.lstrip("\ufeff")
-                    json_data = json.loads(data_without_bom)
-                    if json_data["errorCode"] != "0":
-                        raise Exception(
-                            f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
-                        )
-                    token = json_data["token"]
-
-                    return token
-                else:
-                    self.log(f"return code was {r.status_code} with {r.text}")
-            except Exception as e:
-                self.log("Failure in generating token from secret hash!")
-                self.log(e)
+            return json_r["token"]
 
         def get_lpn_data(token):
             api_ep = f"{base_url}/index.php"
+            # get data for yesterday only
             start_date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
             end_date = datetime.today().strftime("%Y-%m-%d")
 
@@ -165,23 +174,8 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 "Authorization": f"Bearer {token}",
             }
 
-            try:
-                r = requests.post(api_ep, data=payload, headers=headers)
-                if r.status_code == 200:
-                    data_without_bom = r.text.lstrip("\ufeff")
-                    json_data = json.loads(data_without_bom)
-                    if "errorCode" in json_data and json_data["errorCode"] != "0":
-                        self.notifier("aaaaah")
-                        raise Exception(
-                            f"Backend returned non-zero error code: {json_data['error']} ({json_data['errorCode']})"
-                        )
-
-                    self.log(json_data)
-                    return json_data
-                else:
-                    self.log(f"return code was {r.status_code} with {r.text}")
-            except Exception as e:
-                self.log(e)
+            json_r = _post(api_ep, payload, headers)
+            return json_r
 
         base_url = self.args["energiapro_api_base_url"]
         hashpw = get_hashed_passwd()
@@ -189,19 +183,22 @@ class EnergiaproGasConsumption(hassapi.Hass):
         lpn_data = get_lpn_data(token)
 
         if lpn_data is None:
-            # exception
+            # exception, no data
             return
-
         if len(lpn_data) == 1:
             self.post_to_entities(lpn_data)
         else:
             self.log("Got multiple lpn records, need only 1!")
 
-    def notifier(self, kwargs):
+    def notifier(self, message):
         # friendly_name = self.get_state(kwargs['entity_name'], attribute='friendly_name')
+        title = "EnergiaPro"
 
-        title = "EnergiaPro!"
-        # message = "{} has been open for more than {} seconds.".format(friendly_name, self.args['ttl'])
-        message = "Test msg"
-
+        # notify first found
         self.call_service("notify/notify", title=title, message=message)
+        # notify front-end
+        self.call_service(
+            "persistent_notification/create",
+            title="EnergiaPro - no data",
+            message=(f"{message}"),
+        )
