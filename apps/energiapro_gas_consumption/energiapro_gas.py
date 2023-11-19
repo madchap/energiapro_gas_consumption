@@ -14,7 +14,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
     def initialize(self):
         # register an API endpoint for manual triggering
-        self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
+        # self.register_endpoint(self.my_callback, "energiapro_gas_consumption")
 
         # minutes = 60
         # self.log(f"Will fetch gas data every {minutes} minutes")
