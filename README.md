@@ -8,8 +8,6 @@ Make sure that you [have the AppDaemon discovery and tracking](https://hacs.xyz/
 # Breaking change, new way to get data
 Over the past few months, EnergiaPro has introduced changes to their customer portal, the latest being CloudFlare Turnstile, an invisible reCaptcha mechanism to prevent automated bot to do... what I was doing :-/ Even though legit requests, this service detects bot activity and login will not work.
 
-The main branch of this repository will become the `via-api` branch, and should therefore be the one showing up in HACS.
-
 ## EnergiaPro now has an (unadvertised) API
 But all is not lost. While not advertised, there is an API available!
 
