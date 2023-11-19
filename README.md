@@ -11,11 +11,11 @@ Over the past few months, EnergiaPro has introduced changes to their customer po
 ## EnergiaPro now has an (unadvertised) API
 But all is not lost. While not advertised, there is an API available!
 
-Until EnergiaPro officializes and socializes the API, you can reach out to them at clients@energiapro.ch to get more information for the API service.
+Until EnergiaPro officializes and socializes the API, you can reach out to them at clients@energiapro.ch to get more information for the API service and ultimately get the new set of credentials to make this AppDaemon work.
 
 ## Energiapro pre-requisite
 - Your gas installation is already equipped with EnergiaPro's LoraWan equipement.
-- You already possess regular login credentials to EnergiaPro's customer portal and can see that the daily data is available there, also available as the XLS download.
+- You possess API login credentials.
 
 If you are not equipped with the LoraWan stuff, you should be able to contact EnergiaPro and request its installation and configuration at no charge.
 
@@ -32,7 +32,6 @@ Make sure you have the following python packages installed:
 - (deprecated, can be removed for use with the API) beautifulsoup4
 - requests
 - bcrypt
--
 
 ## Configuration
 ### secrets.yaml
