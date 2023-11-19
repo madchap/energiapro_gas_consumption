@@ -1,23 +1,21 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 
+This repo or its code author is not affiliated with EnergiaPro.
+
 # HACS configuration
 Make sure that you [have the AppDaemon discovery and tracking](https://hacs.xyz/docs/categories/appdaemon_apps) enabled for HACS.
 
-# EnergiaPro gas consumption readings
-This appdaemon will go fetch your gas data from EnergiaPro's customer portal, which you would find at https://www.holdigaz.ch/espace-client/views/view.login.php
+# Breaking change, new way to get data
+Over the past few months, EnergiaPro has introduced changes to their customer portal, the latest being CloudFlare Turnstile, an invisible reCaptcha mechanism to prevent automated bot to do... what I was doing :-/ Even though legit requests, this service detects bot activity and login will not work.
 
-This appdaemon's app only supports 1 gas installation (at least for now).
+The main branch of this repository will become the `via-api` branch, and should therefore be the one showing up in HACS.
 
-## High-level flow
-- Login to customer portal and download xls file
-- Grab the excel file, and consume its last line
-- POSTs the data to the following two new HA sensors:
-  - `sensor.energiapro_gas_daily` (m3 of gas consumed in the day)
-  - `sensor.energiapro_gas_total` (actual "relevé" in m3 on your installation)
+## EnergiaPro now has an (unadvertised) API
+But all is not lost. While not advertised, there is an API available!
 
-There seems to be 2 postings a day to the portal, but the numbers are usually available the day after. As far as I know, there is no "back-posting" the data in HA, unless we fiddle with the database, so the data will be skewed in time.
+Until EnergiaPro officializes and socializes the API, you can reach out to them at clients@energiapro.ch to get more information for the API service.
 
-# Energiapro pre-requisite
+## Energiapro pre-requisite
 - Your gas installation is already equipped with EnergiaPro's LoraWan equipement.
 - You already possess regular login credentials to EnergiaPro's customer portal and can see that the daily data is available there, also available as the XLS download.
 
@@ -31,38 +29,46 @@ You will need to have the following information for configuration:
 
 ## AppDaemon's python packages pre-requisites
 Make sure you have the following python packages installed:
-- xlrd
-- pandas
+- (deprecated, can be removed for use with the API) xlrd
+- (deprecated, can be removed for use with the API) pandas
+- (deprecated, can be removed for use with the API) beautifulsoup4
 - requests
-- beautifulsoup4
+- bcrypt
+-
 
 ## Configuration
 ### secrets.yaml
 You will need the following in your secrets.yaml file
 
 ```
-energiapro_email: <YOUR_EMAIL>
-energiapro_password: <YOUR_PASSWORD>
+(deprecated, can be removed for use with the API) energiapro_email: <YOUR_EMAIL>
+(deprecated, can be removed for use with the API) energiapro_password: <YOUR_PASSWORD>
 energiapro_installation_number: "<YOUR_INSTALLATION_NUMBER>"
 energiapro_client_number: "<YOUR_CLIENT_NUMBER>"
 energiapro_bearer_token: <HA_LONG_LIVE_TOKEN>
+energiapro_api_base_url: "https://www.holdigaz.ch/espace-client-api/api/"
+energiapro_api_username: "<API USER NUMBER>"
+energiapro_api_secret_seed: "<SECRET COMMUNICATED TO YOU BY ENERGIAPRO>"
 ```
 
 > Don't forget to put your installation number between double quotes to avoid yaml truncating it.
 
 ### apps.yaml
-Define your app like the following:
+Define your app like the following. You can remove the deprecated secrets per the above too.
 
 ```
 energiapro_gas_consumption:
   module: energiapro_gas
   class: EnergiaproGasConsumption
   energiapro_base_url: https://www.holdigaz.ch/espace-client
-  energiapro_email: !secret energiapro_email
-  energiapro_password: !secret energiapro_password
+  # energiapro_email: !secret energiapro_email
+  # energiapro_password: !secret energiapro_password
   energiapro_bearer_token: !secret energiapro_bearer_token
   energiapro_installation_number: !secret energiapro_installation_number
   energiapro_client_number: !secret energiapro_client_number
+  energiapro_api_username: !secret energiapro_api_username
+  energiapro_api_base_url: !secret energiapro_api_base_url
+  energiapro_api_secret_seed: !secret energiapro_api_secret_seed
   # ha_url: http://localhost:8123  # optional, in case hassplugin ha_url undefined
 ```
 

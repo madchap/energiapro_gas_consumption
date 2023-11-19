@@ -19,7 +19,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
         # minutes = 60
         # self.log(f"Will fetch gas data every {minutes} minutes")
         # self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
-        mytime = "11:00:00"
+        mytime = "21:00:00"
         self.log(f"Will fetch gas data every day at {mytime}")
         self.run_daily(self.get_gas_data, mytime)
         # self.run_at_sunrise(self.get_gas_data)
@@ -29,17 +29,8 @@ class EnergiaproGasConsumption(hassapi.Hass):
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
-            last_daily_measure = lpn_data[0].get("quantite_m3")
 
-            """
-            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
-            # if last measure is older than yesterday, zero it out
-            # Remember we process 1 day old data anyways
-            # naively account for time component with <2d
-            if not (datetime.now() - record_date < timedelta(days=2)):
-                self.log(f"Last measure is from {record_date}, so setting to 0.")
-                last_daily_measure = 0
-            """
+            last_daily_measure = lpn_data[0].get("quantite_m3")
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -57,16 +48,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
             last_daily_measure = lpn_data[0].get("consommation_kw_h")
-            """
-            record_date = datetime.strptime(lpn_data[0].get("date")[:-9], "%Y-%m-%d")
-            # if last measure is older than yesterday, zero it out
-            # Remember we process 1 day old data anyways
-            # naively account for time component with <2d
-            if not (datetime.now() - record_date < timedelta(days=2)):
-                self.log(f"Last measure is from {record_date}, so setting to 0.")
-                last_daily_measure = 0
-            """
-
             daily_payload = {
                 "state": last_daily_measure,
                 "attributes": {
@@ -199,6 +180,6 @@ class EnergiaproGasConsumption(hassapi.Hass):
         # notify front-end
         self.call_service(
             "persistent_notification/create",
-            title="EnergiaPro - no data",
+            title="EnergiaPro",
             message=(f"{message}"),
         )
