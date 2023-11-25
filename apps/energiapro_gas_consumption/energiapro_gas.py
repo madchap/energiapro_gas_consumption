@@ -21,14 +21,13 @@ class EnergiaproGasConsumption(hassapi.Hass):
         self.run_every(self.get_gas_data, datetime.now(), minutes * 60)
 
     def post_to_entities(self, lpn_data):
-        def _post_daily_consumption():
+        def _post_daily_consumption(daily_m3):
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_daily"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            last_daily_measure = lpn_data[0].get("quantite_m3")
             daily_payload = {
-                "state": last_daily_measure,
+                "state": daily_m3,
                 "attributes": {
                     "unit_of_measurement": "m³",
                     "device_class": "gas",
@@ -36,16 +35,15 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 },
             }
             requests.post(entity_url, json=daily_payload, headers=headers)
-            self.log(f"POST'ed {last_daily_measure} to {entity_url}")
+            self.log(f"POST'ed {daily_m3} to {entity_url}")
 
-        def _post_daily_kwh_consumption():
+        def _post_daily_kwh_consumption(daily_kwh):
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_kwh_daily"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            last_daily_measure = lpn_data[0].get("consommation_kw_h")
             daily_payload = {
-                "state": last_daily_measure,
+                "state": daily_kwh,
                 "attributes": {
                     "unit_of_measurement": "kwh",
                     "device_class": "gas",
@@ -53,16 +51,15 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 },
             }
             requests.post(entity_url, json=daily_payload, headers=headers)
-            self.log(f"POST'ed {last_daily_measure} to {entity_url}")
+            self.log(f"POST'ed {daily_kwh} to {entity_url}")
 
-        def _post_total_consumption():
+        def _post_total_consumption(index_total):
             entity_url = f"{ha_url}/api/states/sensor.energiapro_gas_total"
             token = "Bearer {}".format(self.args["energiapro_bearer_token"])
             headers = {"Authorization": token, "Content-Type": "application/json"}
 
-            total_measure = lpn_data[0].get("index_m3")
             total_payload = {
-                "state": total_measure,
+                "state": index_total,
                 "attributes": {
                     "unit_of_measurement": "m³",
                     "device_class": "gas",
@@ -70,7 +67,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
                 },
             }
             r = requests.post(entity_url, json=total_payload, headers=headers)
-            self.log(f"POST'ed {total_measure} to {entity_url}")
+            self.log(f"POST'ed {index_total} to {entity_url}")
 
         try:
             if self.args["ha_url"]:
@@ -86,9 +83,14 @@ class EnergiaproGasConsumption(hassapi.Hass):
             self.log(e)
             return
 
-        _post_daily_consumption()
-        _post_daily_kwh_consumption()
-        _post_total_consumption()
+        # There can be multiple data elements sent, but they may all come at once upon query.
+        # add up daily measures, otherwise, will only take the last one.
+        qm3 = sum(float(element["quantite_m3"]) for element in lpn_data)
+        kwh = sum(float(element["consommation_kw_h"]) for element in lpn_data)
+        total = max(float(element["index_m3"]) for element in lpn_data)
+        _post_daily_consumption(qm3)
+        _post_daily_kwh_consumption(kwh)
+        _post_total_consumption(total)
 
     def get_gas_data(self, kwargs):
         def _post(ep, payload, headers):
@@ -135,7 +137,7 @@ class EnergiaproGasConsumption(hassapi.Hass):
 
         def get_lpn_data(token):
             api_ep = f"{base_url}/index.php"
-            # get data for yesterday only
+            # get data for yesterday only - there could be multiple elements in the array
             start_date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
             end_date = datetime.today().strftime("%Y-%m-%d")
 
@@ -160,12 +162,9 @@ class EnergiaproGasConsumption(hassapi.Hass):
         lpn_data = get_lpn_data(token)
 
         if lpn_data is None:
-            # exception, no data
+            # exception raised, no data
             return
-        if len(lpn_data) == 1:
-            self.post_to_entities(lpn_data)
-        else:
-            self.log("Got multiple lpn records, need only 1!")
+        self.post_to_entities(lpn_data)
 
     def notifier(self, message):
         # friendly_name = self.get_state(kwargs['entity_name'], attribute='friendly_name')
