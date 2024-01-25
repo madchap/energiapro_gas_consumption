@@ -43,7 +43,7 @@ You will need the following in your secrets.yaml file
 energiapro_installation_number: "<YOUR_INSTALLATION_NUMBER>"
 energiapro_client_number: "<YOUR_CLIENT_NUMBER>"
 energiapro_bearer_token: <HA_LONG_LIVE_TOKEN>
-energiapro_api_base_url: "https://www.holdigaz.ch/espace-client-api/api/"
+energiapro_api_base_url: "https://web2.holdigaz.ch/espace-client-api/api/"
 energiapro_api_username: "<API USER NUMBER>"
 energiapro_api_secret_seed: "<SECRET COMMUNICATED TO YOU BY ENERGIAPRO>"
 ```
