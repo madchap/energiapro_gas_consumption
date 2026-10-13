@@ -34,6 +34,9 @@ Make sure you have the following python packages installed:
 - bcrypt
 
 ## Configuration
+### API base URL
+The customer API no longer lives on `web2.holdigaz.ch` (that host returns 404). It is now served from `https://my.energiapro.ch/espace-client-api/api/`. Update `energiapro_api_base_url` in `secrets.yaml` if you still have the old value. 
+
 ### secrets.yaml
 You will need the following in your secrets.yaml file
 
@@ -43,7 +46,7 @@ You will need the following in your secrets.yaml file
 energiapro_installation_number: "<YOUR_INSTALLATION_NUMBER>"
 energiapro_client_number: "<YOUR_CLIENT_NUMBER>"
 energiapro_bearer_token: <HA_LONG_LIVE_TOKEN>
-energiapro_api_base_url: "https://web2.holdigaz.ch/espace-client-api/api/"
+energiapro_api_base_url: "https://my.energiapro.ch/espace-client-api/api/"
 energiapro_api_username: "<API USER NUMBER>"
 energiapro_api_secret_seed: "<SECRET COMMUNICATED TO YOU BY ENERGIAPRO>"
 ```
@@ -57,7 +60,7 @@ Define your app like the following. You can remove the deprecated secrets per th
 energiapro_gas_consumption:
   module: energiapro_gas
   class: EnergiaproGasConsumption
-  energiapro_base_url: https://www.holdigaz.ch/espace-client
+  energiapro_base_url: https://my.energiapro.ch/espace-client
   # energiapro_email: !secret energiapro_email
   # energiapro_password: !secret energiapro_password
   energiapro_bearer_token: !secret energiapro_bearer_token
